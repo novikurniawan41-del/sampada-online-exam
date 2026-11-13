@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SAMPADA EXAM – Platform Asesmen Online</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{background:#f8fafc}</style>
+</head><body class="text-slate-800 min-h-screen"><div id="app"></div>
+<script>
+const S={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const ses={get(){try{return JSON.parse(sessionStorage.getItem('sess'))}catch(e){return null}},set(v){try{v?sessionStorage.setItem('sess',JSON.stringify(v)):sessionStorage.removeItem('sess')}catch(e){}}};
+const uid=()=>Math.random().toString(36).slice(2,9);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const L=['A','B','C','D','E'];
+if(!S.get('users'))S.set('users',[{u:'admin',p:'administrator',role:'admin',nama:'Administrator'},{u:'siswa1',p:'123',role:'siswa',nama:'Siswa Satu'},{u:'siswa2',p:'123',role:'siswa',nama:'Siswa Dua'}]);
+if(!S.get('soal'))S.set('soal',[
+{id:uid(),q:'Ibu kota Indonesia saat ini adalah...',o:['Bandung','Jakarta','Surabaya','Medan','Makassar'],k:'B'},
+{id:uid(),q:'Hasil dari 12 × 8 adalah...',o:['86','92','96','98','104'],k:'C'},
+{id:uid(),q:'Planet terbesar di tata surya adalah...',o:['Mars','Bumi','Saturnus','Jupiter','Venus'],k:'D'}]);
+(()=>{let c=S.get('cfg');if(!c||c.judul!==undefined){const o=c||{judul:'Latihan Asesmen',durasi:10};c={};['4','5','6'].forEach(k=>c[k]={judul:o.judul+' Kelas '+k,durasi:o.durasi});S.set('cfg',c)}
+S.set('soal',S.get('soal',[]).map(x=>x.kl?x:{...x,kl:'4'}));S.set('users',S.get('users',[]).map(u=>u.role==='siswa'&&!u.kl?{...u,kl:'4'}:u.u==='admin'&&u.p==='123'?{...u,p:'administrator'}:u))})();
+const KL=['4','5','6'],cfgK=k=>(S.get('cfg')||{})[k]||{judul:'Asesmen Kelas '+k,durasi:10};
+if(!S.get('hasil'))S.set('hasil',[]);
+const B='px-4 py-2 rounded-lg font-medium transition ',P=B+'bg-indigo-600 text-white hover:bg-indigo-700',G=B+'bg-slate-100 hover:bg-slate-200',R=B+'bg-red-50 text-red-600 hover:bg-red-100',I='w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400',C='bg-white rounded-2xl shadow-sm border border-slate-200 p-5';
+let V={tab:'soal',mode:'home',edit:null,imp:'',kl:'4',sk:'',hk:''},Q=null,timer=null;
+const $=id=>document.getElementById(id),val=id=>$(id).value.trim();
+const me=()=>ses.get();
+
+function render(){const s=me(),a=$('app');
+ if(!s)a.innerHTML=loginView();else if(s.role==='admin')a.innerHTML=adminView(s);else a.innerHTML=siswaView(s);
+ if(s&&s.role==='siswa'&&V.mode==='quiz')tick()}
+
+/* ---------- AUTH ---------- */
+function loginView(){return`<div class="min-h-screen grid place-items-center p-4"><div class="${C} w-full max-w-sm">
+<div class="text-center mb-5"><div class="text-4xl">📝</div><h1 class="text-2xl font-bold mt-2">SAMPADA EXAM</h1><p class="text-sm text-slate-500">Platform Asesmen Online</p></div>
+<label class="text-sm font-medium">Username</label><input id="lu" class="${I} mb-3" autocomplete="username">
+<label class="text-sm font-medium">Password</label><input id="lp" type="password" class="${I} mb-3" onkeydown="if(event.key==='Enter')login()">
+<p id="le" class="text-red-600 text-sm mb-2 hidden">Username atau password salah.</p>
+<button class="${P} w-full" onclick="login()">Masuk</button>
+</div></div>`}
+function login(){const u=S.get('users',[]).find(x=>x.u===val('lu')&&x.p===$('lp').value);
+ if(!u){$('le').classList.remove('hidden');return}
+ ses.set({u:u.u,role:u.role,nama:u.nama,kl:u.kl});V={tab:'soal',mode:'home',edit:null,imp:'',kl:'4',sk:'',hk:''};render()}
+function logout(){clearInterval(timer);Q=null;ses.set(null);render()}
+const head=(s,extra='')=>`<header class="bg-white border-b sticky top-0 z-10"><div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-2"><div class="font-bold text-indigo-600">📝 SAMPADA EXAM <span class="ml-1 text-xs bg-indigo-50 px-2 py-0.5 rounded-full">${s.role}</span></div>${extra}<div class="flex items-center gap-2 text-sm"><span class="hidden sm:inline">${esc(s.nama)}</span><button class="${G} !py-1" onclick="logout()">Keluar</button></div></div></header>`;
+
+/* ---------- ADMIN ---------- */
+function adminView(s){const t=V.tab,tabs=[['soal','Manajemen Soal'],['siswa','Daftar Siswa'],['hasil','Rekap Nilai']];
+ return head(s)+`<main class="max-w-5xl mx-auto p-4 space-y-4"><nav class="flex gap-2 overflow-x-auto">${tabs.map(([k,n])=>`<button class="${B} whitespace-nowrap ${t===k?'bg-indigo-600 text-white':'bg-white border'}" onclick="V.tab='${k}';V.edit=null;render()">${n}</button>`).join('')}</nav>${t==='soal'?soalTab():t==='siswa'?siswaTab():hasilTab()}</main>`}
+const kelasBar=(fn,cur,all)=>`<div class="flex gap-2 overflow-x-auto">${(all?['',...KL]:KL).map(k=>`<button class="${B} whitespace-nowrap ${cur===k?'bg-slate-800 text-white':'bg-white border'}" onclick="${fn}('${k}')">${k?'Kelas '+k:'Semua'}</button>`).join('')}</div>`;
+const setKl=k=>{V.kl=k;V.edit=null;render()},setSk=k=>{V.sk=k;render()},setHk=k=>{V.hk=k;render()};
+function soalTab(){const kl=V.kl,cfg=cfgK(kl),all=S.get('soal',[]),list=all.filter(x=>x.kl===kl),e=all.find(x=>x.id===V.edit)||{q:'',o:['','','','',''],k:'A'};
+ return kelasBar('setKl',kl)+`<section class="${C}"><h2 class="font-bold mb-3">Pengaturan Asesmen Kelas ${kl}</h2><div class="grid sm:grid-cols-3 gap-3"><input id="cj" class="${I} sm:col-span-2" value="${esc(cfg.judul)}" placeholder="Judul"><input id="cd" type="number" min="1" class="${I}" value="${cfg.durasi}" placeholder="Durasi (menit)"></div><button class="${P} mt-3" onclick="saveCfg()">Simpan Pengaturan</button></section>
+<section class="${C}"><h2 class="font-bold mb-3">${V.edit?'Edit Soal':'Tambah Soal Manual'} · Kelas ${kl}</h2>
+<textarea id="sq" rows="2" class="${I} mb-3" placeholder="Pertanyaan">${esc(e.q)}</textarea>
+<div class="grid sm:grid-cols-2 gap-3">${L.map((l,i)=>`<div class="flex items-center gap-2"><b class="w-6">${l}</b><input id="so${i}" class="${I}" value="${esc(e.o[i])}" placeholder="Pilihan ${l}"></div>`).join('')}
+<div class="flex items-center gap-2"><b>Kunci</b><select id="sk" class="${I}">${L.map(l=>`<option ${e.k===l?'selected':''}>${l}</option>`).join('')}</select></div></div>
+<div class="mt-3 flex gap-2"><button class="${P}" onclick="saveSoal()">${V.edit?'Update':'Tambah'}</button>${V.edit?`<button class="${G}" onclick="V.edit=null;render()">Batal</button>`:''}</div></section>
+<section class="${C}"><h2 class="font-bold mb-1">Upload Massal ke Kelas ${kl} (Word / JSON / CSV)</h2><p class="text-xs text-slate-500 mb-2">Word (.docx): tulis <code>1. Pertanyaan</code>, baris <code>A. ...</code> sampai <code>E. ...</code>, lalu <code>Kunci: B</code>. CSV: <code>pertanyaan,A,B,C,D,E,kunci</code></p>
+<input type="file" accept=".docx,.json,.csv,.txt" class="text-sm mb-2" onchange="loadFile(this)">
+<textarea id="imp" rows="4" class="${I} font-mono text-xs" placeholder="Pilih file atau tempel isi CSV/JSON di sini">${esc(V.imp)}</textarea>
+<button class="${P} mt-2" onclick="imporSoal()">Impor Soal</button></section>
+<section class="${C}"><h2 class="font-bold mb-3">Daftar Soal Kelas ${kl} (${list.length})</h2><div class="space-y-3">${list.map((x,i)=>`<div class="border rounded-xl p-3"><div class="flex justify-between gap-2"><p class="font-medium">${i+1}. ${esc(x.q)}</p><div class="flex gap-1 shrink-0"><button class="${G} !py-1 !px-2" onclick="V.edit='${x.id}';render();scrollTo(0,0)">Edit</button><button class="${R} !py-1 !px-2" onclick="delSoal('${x.id}')">Hapus</button></div></div><ul class="text-sm mt-1 grid sm:grid-cols-2 gap-x-4">${x.o.map((o,j)=>`<li class="${L[j]===x.k?'text-emerald-600 font-semibold':''}">${L[j]}. ${esc(o)}</li>`).join('')}</ul></div>`).join('')||'<p class="text-slate-500">Belum ada soal.</p>'}</div></section>`}
+function saveCfg(){const d=parseInt(val('cd'));if(!val('cj')||!(d>0))return alert('Isi judul dan durasi valid.');const c=S.get('cfg');c[V.kl]={judul:val('cj'),durasi:d};S.set('cfg',c);alert('Tersimpan.')}
+function saveSoal(){const o=L.map((_,i)=>val('so'+i));if(!val('sq')||o.some(x=>!x))return alert('Pertanyaan dan semua pilihan A–E wajib diisi.');
+ const list=S.get('soal',[]),n={id:V.edit||uid(),q:val('sq'),o,k:$('sk').value,kl:V.kl};
+ V.edit?list.splice(list.findIndex(x=>x.id===V.edit),1,n):list.push(n);S.set('soal',list);V.edit=null;render()}
+function delSoal(id){if(confirm('Hapus soal ini?')){S.set('soal',S.get('soal',[]).filter(x=>x.id!==id));render()}}
+function docxParse(t){const out=[];let c=null,m;const push=()=>{if(c&&c.q&&c.o.length===5&&c.k)out.push(c)};
+ for(const raw of t.split(/\r?\n/)){const l=raw.trim();if(!l)continue;
+  if((m=l.match(/^(?:kunci|jawaban)(?:\s+jawaban)?\s*[:=]\s*([A-Ea-e])/i))){if(c)c.k=m[1].toUpperCase()}
+  else if(c&&c.o.length<5&&(m=l.match(/^([A-Ea-e])[.)]\s*(.+)/))&&m[1].toUpperCase()===L[c.o.length]){c.o.push(m[2])}
+  else if((m=l.match(/^\d+[.)]\s*(.+)/))){push();c={q:m[1],o:[],k:''}}
+  else if(c&&!c.o.length)c.q+=' '+l}
+ push();return out}
+function loadFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();
+ if(/\.docx$/i.test(f.name)){if(!window.mammoth)return alert('Library Word gagal dimuat (cek koneksi internet).');
+  r.onload=()=>mammoth.extractRawText({arrayBuffer:r.result}).then(x=>{const q=docxParse(x.value);if(!q.length)return alert('Tidak ada soal terbaca. Pastikan format: 1. Pertanyaan / A. sampai E. / Kunci: X');V.imp=JSON.stringify(q,null,1);$('imp').value=V.imp;alert(q.length+' soal terbaca. Periksa pratinjau, lalu klik Impor Soal.')}).catch(()=>alert('Gagal membaca file Word.'));
+  r.readAsArrayBuffer(f);return}
+ r.onload=()=>{V.imp=r.result;$('imp').value=r.result};r.readAsText(f)}
+function csvLine(l){const r=[];let c='',q=false;for(const ch of l){if(ch==='"')q=!q;else if(ch===','&&!q){r.push(c.trim());c=''}else c+=ch}r.push(c.trim());return r}
+function imporSoal(){const t=val('imp');if(!t)return alert('Tidak ada data.');let rows=[];
+ try{rows=JSON.parse(t).map(x=>({q:x.q||x.pertanyaan,o:x.o||x.opsi,k:String(x.k||x.kunci||'').toUpperCase()}))}
+ catch(e){rows=t.split(/\r?\n/).filter(l=>l.trim()).map(csvLine).filter(c=>c[6]&&c[6].toLowerCase()!=='kunci').map(c=>({q:c[0],o:c.slice(1,6),k:c[6].toUpperCase()}))}
+ const ok=rows.filter(x=>x.q&&Array.isArray(x.o)&&x.o.length===5&&x.o.every(Boolean)&&L.includes(x.k));
+ if(!ok.length)return alert('Format tidak valid / tidak ada baris yang bisa diimpor.');
+ S.set('soal',[...S.get('soal',[]),...ok.map(x=>({id:uid(),q:x.q,o:x.o,k:x.k,kl:V.kl}))]);V.imp='';alert(ok.length+' soal diimpor ke Kelas '+V.kl+' ('+(rows.length-ok.length)+' dilewati).');render()}
+function siswaTab(){const us=S.get('users',[]).filter(u=>u.role==='siswa'&&(!V.sk||u.kl===V.sk)),h=S.get('hasil',[]);
+ return`<section class="${C}"><h2 class="font-bold mb-3">Tambah Siswa</h2><div class="grid sm:grid-cols-5 gap-2"><input id="nn" class="${I}" placeholder="Nama lengkap"><input id="nu" class="${I}" placeholder="Username"><input id="np" class="${I}" placeholder="Password"><select id="nk" class="${I}">${KL.map(k=>`<option value="${k}">Kelas ${k}</option>`).join('')}</select><button class="${P}" onclick="addSiswa()">Tambah</button></div></section>
+<section class="${C}"><h2 class="font-bold mb-1">Impor Siswa dari Excel</h2><p class="text-xs text-slate-500 mb-2">File .xlsx/.xls/.csv dengan baris pertama header: <code>Nama | Username | Password | Kelas</code> (Kelas diisi 4, 5, atau 6; password kosong = 123).</p><input type="file" accept=".xlsx,.xls,.csv" class="text-sm" onchange="importSiswa(this)"></section>
+${kelasBar('setSk',V.sk,true)}<section class="${C} overflow-x-auto"><h2 class="font-bold mb-3">Daftar Siswa (${us.length})</h2><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-2">Nama</th><th>Username</th><th>Kelas</th><th>Ujian</th><th></th></tr></thead><tbody>${us.map(u=>`<tr class="border-t"><td class="py-2">${esc(u.nama)}</td><td>${esc(u.u)}</td><td>${u.kl}</td><td>${h.filter(x=>x.u===u.u).length}x</td><td class="text-right"><button class="${R} !py-1 !px-2" onclick="delSiswa('${esc(u.u)}')">Hapus</button></td></tr>`).join('')}</tbody></table></section>`}
+function addSiswa(){const us=S.get('users',[]),u=val('nu');if(!val('nn')||!u||!val('np'))return alert('Lengkapi data.');if(us.some(x=>x.u===u))return alert('Username sudah dipakai.');us.push({u,p:val('np'),role:'siswa',nama:val('nn'),kl:$('nk').value});S.set('users',us);render()}
+function delSiswa(u){if(confirm('Hapus siswa '+u+'?')){S.set('users',S.get('users',[]).filter(x=>x.u!==u));render()}}
+function importSiswa(inp){const f=inp.files[0];if(!f)return;if(!window.XLSX)return alert('Library Excel gagal dimuat (cek koneksi internet).');
+ const r=new FileReader();r.onload=()=>{try{const wb=XLSX.read(r.result,{type:'array'}),rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}),us=S.get('users',[]);let n=0,sk=0;
+ rows.forEach(o=>{const g=k=>{const key=Object.keys(o).find(x=>x.trim().toLowerCase()===k);return key?String(o[key]).trim():''},nama=g('nama'),u=g('username'),kl=(g('kelas').match(/[456]/)||[''])[0];
+  if(!nama||!u||!kl||us.some(x=>x.u===u)){sk++;return}us.push({u,p:g('password')||'123',role:'siswa',nama,kl});n++});
+ S.set('users',us);alert(n+' siswa diimpor, '+sk+' dilewati (data kurang / username sudah ada / kelas bukan 4-6).');render()}catch(e){alert('Gagal membaca file Excel.')}};r.readAsArrayBuffer(f)}
+function hasilTab(){const h=[...S.get('hasil',[])].reverse().filter(x=>!V.hk||x.kl===V.hk),avg=h.length?Math.round(h.reduce((a,x)=>a+x.skor,0)/h.length):0;
+ return kelasBar('setHk',V.hk,true)+`<section class="${C} overflow-x-auto"><div class="flex justify-between items-center mb-3"><h2 class="font-bold">Rekap Nilai · ${h.length} pengerjaan · rata-rata ${avg}</h2><button class="${R} !py-1" onclick="if(confirm('Hapus semua hasil?')){S.set('hasil',[]);render()}">Reset</button></div><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-2">Siswa</th><th>Kelas</th><th>Asesmen</th><th>Benar</th><th>Skor</th><th>Waktu</th></tr></thead><tbody>${h.map(x=>`<tr class="border-t"><td class="py-2">${esc(x.nama)}</td><td>${x.kl||'-'}</td><td>${esc(x.judul)}</td><td>${x.benar}/${x.total}</td><td><b class="${x.skor>=70?'text-emerald-600':'text-red-600'}">${x.skor}</b></td><td>${new Date(x.waktu).toLocaleString('id-ID')}</td></tr>`).join('')||'<tr><td colspan=6 class="py-4 text-slate-500">Belum ada hasil.</td></tr>'}</tbody></table></section>`}
+
+/* ---------- SISWA ---------- */
+function siswaView(s){if(V.mode==='quiz'&&Q)return quizView(s);if(V.mode==='result')return resultView(s);
+ const cfg=cfgK(s.kl),n=S.get('soal',[]).filter(x=>x.kl===s.kl).length,h=S.get('hasil',[]).filter(x=>x.u===s.u).reverse();
+ return head(s)+`<main class="max-w-3xl mx-auto p-4 space-y-4"><h2 class="text-xl font-bold">Halo, ${esc(s.nama)} 👋 <span class="text-sm font-medium bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">Kelas ${s.kl||'-'}</span></h2>
+<div class="${C} flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-semibold text-lg">${esc(cfg.judul)}</h3><p class="text-sm text-slate-500">${n} soal · ${cfg.durasi} menit</p></div><button class="${P}" ${n?'':'disabled'} onclick="startQuiz()">Mulai Latihan</button></div>
+<div class="${C}"><h3 class="font-semibold mb-2">Riwayat Nilai</h3>${h.map(x=>`<div class="flex justify-between border-t py-2 text-sm"><span>${esc(x.judul)} · ${new Date(x.waktu).toLocaleString('id-ID')}</span><b>${x.skor}</b></div>`).join('')||'<p class="text-sm text-slate-500">Belum ada riwayat.</p>'}</div></main>`}
+function startQuiz(){const s=me();Q={list:S.get('soal',[]).filter(x=>x.kl===s.kl),ans:{},i:0,end:Date.now()+cfgK(s.kl).durasi*60000};V.mode='quiz';clearInterval(timer);timer=setInterval(tick,500);render()}
+function tick(){if(!Q)return;const r=Math.max(0,Q.end-Date.now()),el=$('tm');if(el){el.textContent=String(Math.floor(r/60000)).padStart(2,'0')+':'+String(Math.floor(r/1000)%60).padStart(2,'0');el.className=r<60000?'font-mono font-bold text-red-600':'font-mono font-bold'}if(r<=0)finish(true)}
+function quizView(s){const q=Q.list[Q.i],last=Q.i===Q.list.length-1;
+ return head(s,`<div class="text-sm">⏱ <span id="tm" class="font-mono font-bold">--:--</span></div>`)+`<main class="max-w-4xl mx-auto p-4 grid md:grid-cols-[1fr_220px] gap-4">
+<section class="${C}"><p class="text-xs text-slate-500 mb-1">Soal ${Q.i+1} dari ${Q.list.length}</p><h3 class="text-lg font-semibold mb-4">${esc(q.q)}</h3><div class="space-y-2">${q.o.map((o,j)=>`<button onclick="pick('${L[j]}')" class="w-full text-left border rounded-xl px-4 py-3 transition ${Q.ans[Q.i]===L[j]?'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-300':'hover:bg-slate-50'}"><b class="mr-2">${L[j]}.</b>${esc(o)}</button>`).join('')}</div>
+<div class="flex justify-between mt-5"><button class="${G}" ${Q.i?'':'disabled'} onclick="Q.i--;render()">← Sebelumnya</button>${last?`<button class="${P} !bg-emerald-600" onclick="finish(false)">Selesai / Kumpul</button>`:`<button class="${P}" onclick="Q.i++;render()">Berikutnya →</button>`}</div></section>
+<aside class="${C} h-fit"><h4 class="font-semibold mb-2 text-sm">Navigasi Soal</h4><div class="grid grid-cols-5 gap-2">${Q.list.map((_,i)=>`<button onclick="Q.i=${i};render()" class="h-9 rounded-lg text-sm font-medium ${i===Q.i?'bg-indigo-600 text-white':Q.ans[i]?'bg-emerald-100 text-emerald-700':'bg-slate-100'}">${i+1}</button>`).join('')}</div><button class="${P} w-full mt-4 !bg-emerald-600" onclick="finish(false)">Kumpul Ujian</button></aside></main>`}
+function pick(k){Q.ans[Q.i]=k;render()}
+function finish(auto){if(!Q)return;const un=Q.list.length-Object.keys(Q.ans).length;if(!auto&&un&&!confirm(un+' soal belum dijawab. Kumpulkan sekarang?'))return;
+ clearInterval(timer);const s=me(),benar=Q.list.filter((x,i)=>Q.ans[i]===x.k).length,total=Q.list.length,
+ r={id:uid(),u:s.u,nama:s.nama,kl:s.kl,judul:cfgK(s.kl).judul,benar,total,skor:Math.round(benar/total*100),waktu:Date.now(),auto};
+ S.set('hasil',[...S.get('hasil',[]),r]);V.last=r;V.mode='result';Q=null;render()}
+function resultView(s){const r=V.last,ok=r.skor>=70;
+ return head(s)+`<main class="max-w-md mx-auto p-4"><div class="${C} text-center"><div class="text-5xl">${ok?'🎉':'💪'}</div><h2 class="text-xl font-bold mt-2">${r.auto?'Waktu habis!':'Ujian selesai!'}</h2><p class="text-slate-500 text-sm">${esc(r.judul)}</p><div class="text-6xl font-extrabold my-4 ${ok?'text-emerald-600':'text-red-600'}">${r.skor}</div><p>Benar <b>${r.benar}</b> dari <b>${r.total}</b> soal</p><button class="${P} mt-5" onclick="V.mode='home';render()">Kembali ke Dashboard</button></div></main>`}
+render();
+</script></body></html>
